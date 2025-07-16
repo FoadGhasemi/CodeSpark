@@ -37,11 +37,16 @@ def save_json(path, data):
 
 # --- Localization ---
 def get_lang(user_id):
+    """returns a value like "en" "fa" """
     langs = load_json(LANG_FILE)
     return langs.get(str(user_id), "en")
 
 def t(user_id, key):
-    lang = get_lang(user_id)
+    """due to the structure of k, v s in the MSG file
+    here "key" plays a crucial role in retrival
+    * here the parameter user_id is just needed for the function
+    get_lang used in messages var """
+    lang = get_lang(user_id) # "en" or "fa"
     messages = load_json(MSG_FILE)
     return messages.get(key, {}).get(lang, key)
 
@@ -83,14 +88,18 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🧠 {question['question']}",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+    # due to the help of buttons var
+    # we can now show all the options of a question in separate buttons.
 
 async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_json(USER_FILE)
     score = users.get(str(update.effective_user.id), {}).get("score", 0)
+    # the paralel value to key "ID" are "score" "current_q"
     await update.message.reply_text(f"🏆 {t(update.effective_user.id, 'score')} {score}")
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    # we use this because we are expecting a button click response
     await query.answer()
     user_id = str(query.from_user.id)
 
@@ -108,12 +117,13 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = t(user_id, "correct") + "\n\n" + question.get("explanation", "")
     else:
         text = t(user_id, "wrong") + f" {correct}\n\n" + question.get("explanation", "")
-
     users[user_id]["current_q"] = None
     save_json(USER_FILE, users)
     await query.edit_message_text(text)
 
 async def upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """probably this function sends message when a premium content
+     tried to get reached by an ordinary user """
     await update.callback_query.answer()
     await update.callback_query.message.reply_text(t(update.effective_user.id, "upgrade"))
 
