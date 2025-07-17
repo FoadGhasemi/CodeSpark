@@ -1,6 +1,6 @@
 # CodeSpark Bot - Upgraded Version (with BMC webhook, language handling, and premium automation)
 # File: bot.py
-
+import asyncio
 import json
 import random
 import os
@@ -178,7 +178,7 @@ async def bmc_webhook(request):
     return web.Response(text="OK")
 
 # --- Main ---
-def main():
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -192,12 +192,19 @@ def main():
     app.add_handler(CallbackQueryHandler(upgrade_callback, pattern="^upgrade$"))
     app.add_handler(CallbackQueryHandler(lang_callback, pattern="^change_lang$"))
 
-    # Add aiohttp endpoint
-    app.run_polling(stop_signals=None)  # for production, replace with app.run_webhook()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 8443)),  # ✅ Let Render assign the port
+        url_path=TOKEN,
+        webhook_url=f"https://codespark-6p27.onrender.com{TOKEN}",  # ✅ Replace with your Render URL
+    )
+    await app.updater.idle()
 
     web_app = web.Application()
     web_app.add_routes([web.post("/bmc_webhook", bmc_webhook)])
     web.run_app(web_app, port=8080)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
