@@ -30,5 +30,9 @@
   "lang_set": {
     "en": "🔄 Language set to English.",
     "fa": "🔄 زبان به فارسی تغییر یافت."
+  },
+  "purchase": {
+    "en": "your now a premium member and have access to premium content",
+    "fa": "شما اکنون عضو ویژه هستید و به محتوای ویژه دسترسی دارید"
   }
 }

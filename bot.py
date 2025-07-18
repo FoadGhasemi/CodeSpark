@@ -128,6 +128,7 @@ async def upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text(t(update.effective_user.id, "upgrade"))
 
 async def lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """probably the function to setting the language"""
     user_id = str(update.effective_user.id)
     langs = load_json(LANG_FILE)
     current = langs.get(user_id, "en")
@@ -142,7 +143,7 @@ async def set_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emails = load_json(EMAIL_MAP_FILE)
     emails[user_id] = email
     save_json(EMAIL_MAP_FILE, emails)
-    await update.message.reply_text("✅ Email saved. We'll match it on purchase.")
+    await update.callback_query.message.reply_text(t(update.effective_user.id, "purchase"))
 
 # --- Admin Broadcast ---
 async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,30 +182,30 @@ async def bmc_webhook(request):
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("quiz", quiz))
     app.add_handler(CommandHandler("score", score))
     app.add_handler(CommandHandler("setemail", set_email))
     app.add_handler(CommandHandler("broadcast", handle_admin_broadcast))
-
     app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer:"))
     app.add_handler(CallbackQueryHandler(upgrade_callback, pattern="^upgrade$"))
     app.add_handler(CallbackQueryHandler(lang_callback, pattern="^change_lang$"))
 
+    # Set webhook
     await app.initialize()
     await app.start()
-    await app.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 8443)),  # ✅ Let Render assign the port
-        url_path=TOKEN,
-        webhook_url=f"https://codespark-6p27.onrender.com{TOKEN}",  # ✅ Replace with your Render URL
-    )
-    await app.updater.idle()
+    await app.bot.set_webhook(f"https://codespark-6p27.onrender.com/{TOKEN}")
 
+    # Start aiohttp server (if you need other routes like /bmc_webhook)
     web_app = web.Application()
-    web_app.add_routes([web.post("/bmc_webhook", bmc_webhook)])
-    web.run_app(web_app, port=8080)
+    web_app.add_routes([
+        web.post("/bmc_webhook", bmc_webhook),
+        web.post(f"/{TOKEN}", app.update_queue.put_nowait),  # Telegram webhook handler
+    ])
+    await web._run_app(web_app, port=int(os.environ.get("PORT", 8443)))
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    # Cleanup
+    await app.stop()
+    await app.shutdown()
