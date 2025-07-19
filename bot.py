@@ -147,6 +147,11 @@ async def set_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Admin Broadcast ---
 async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """This function:
+    Can only be triggered by the admin.
+    Sends the remaining message (after removing /broadcast)
+    to every user ID in your stored JSON file.
+    e.g usage: (telegram message) -> /broadcast Hello all! """
     if update.effective_user.id != ADMIN_ID:
         return
     msg = update.message.text.replace("/broadcast", "").strip()
@@ -205,7 +210,3 @@ async def main():
         web.post(f"/{TOKEN}", app.update_queue.put_nowait),  # Telegram webhook handler
     ])
     await web._run_app(web_app, port=int(os.environ.get("PORT", 8443)))
-
-    # Cleanup
-    await app.stop()
-    await app.shutdown()
