@@ -25,6 +25,8 @@ EMAIL_MAP_FILE = "user_emails.json"
 
 # --- File Helpers ---
 def load_json(path):
+    """This function reads a JSON file from the given path and returns it as a Python dictionary.
+     If the file is missing or unreadable, it returns an empty dictionary."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -37,7 +39,7 @@ def save_json(path, data):
 
 # --- Localization ---
 def get_lang(user_id):
-    """returns a value like "en" "fa" """
+    """returns a value like "en" or "fa" """
     langs = load_json(LANG_FILE)
     return langs.get(str(user_id), "en")
 
@@ -65,15 +67,20 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(t(update.effective_user.id, "help"))
 
 async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """apparently we store the question id in both callback and user info
+    (so we could use it later, for clarity sace)"""
     user_id = str(update.effective_user.id)
-    quizzes = load_json(QUIZ_FILE)
+    quizzes = load_json(QUIZ_FILE)  # now a list of dicts
     users = load_json(USER_FILE)
     premium = load_json(PREMIUM_FILE)
+    lang = get_lang(user_id)  # "en" or "fa"
 
     if user_id not in users:
         users[user_id] = {"score": 0, "current_q": None}
 
-    question = random.choice(quizzes["questions"])
+    question = random.choice(quizzes)
+
+    # Check if it's a premium question and user is not premium
     if question.get("premium") and user_id not in premium:
         await update.message.reply_text(t(user_id, "premium_required"))
         return
@@ -81,42 +88,52 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["current_q"] = question["id"]
     save_json(USER_FILE, users)
 
-    buttons = [[InlineKeyboardButton(opt, callback_data=f"answer:{question['id']}:{opt}")]
-               for opt in question["options"]]
+    # Get question and options in user's language
+    q_text = question["question"].get(lang, question["question"]["en"])
+    q_options = question["options"].get(lang, question["options"]["en"])
+
+    # Create button list
+    buttons = [
+        [InlineKeyboardButton(opt, callback_data=f"answer:{question['id']}:{opt}")]
+        for opt in q_options
+    ]
 
     await update.message.reply_text(
-        f"🧠 {question['question']}",
+        f"🧠 {q_text}",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-    # due to the help of buttons var
-    # we can now show all the options of a question in separate buttons.
 
 async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_json(USER_FILE)
     score = users.get(str(update.effective_user.id), {}).get("score", 0)
-    # the paralel value to key "ID" are "score" "current_q"
+    # the parallel value to key "ID" are "score" "current_q"
     await update.message.reply_text(f"🏆 {t(update.effective_user.id, 'score')} {score}")
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     # we use this because we are expecting a button click response
     await query.answer()
+    # by this we tell telegram that ok thank you
+    # you've sent us the call_back and we've received it!
     user_id = str(query.from_user.id)
+    lang = get_lang(user_id)  # "en" or "fa"
 
-    _, qid, selected = query.data.split(":")
-    quizzes = load_json(QUIZ_FILE)
-    question = next((q for q in quizzes["questions"] if q["id"] == qid), None)
+    _, question_id, selected_option = query.data.split(":") # multiple assignment
+    quizzes = load_json(QUIZ_FILE) # a list of dicts which also include dicts!
+    question = next((q for q in quizzes if q["id"] == question_id), None)
     if not question:
         await query.edit_message_text("❌ Question not found.")
         return
+    # This line sends an error message to the user and stops the function (return)
+    # to avoid running the rest of the logic on a nonexistent question.
 
     users = load_json(USER_FILE)
-    correct = question["answer"]
-    if selected == correct:
+    correct = question["answer"].get(lang, question["answer"]["en"])
+    if selected_option == correct:
         users[user_id]["score"] += 1
-        text = t(user_id, "correct") + "\n\n" + question.get("explanation", "")
+        text = t(user_id, "correct") + "\n\n" + question["explanation"].get(lang, question["explanation"]["en"])
     else:
-        text = t(user_id, "wrong") + f" {correct}\n\n" + question.get("explanation", "")
+        text = t(user_id, "wrong") + f" {correct}\n\n" + question["explanation"].get(lang, question["explanation"]["en"])
     users[user_id]["current_q"] = None
     save_json(USER_FILE, users)
     await query.edit_message_text(text)
@@ -128,7 +145,7 @@ async def upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text(t(update.effective_user.id, "upgrade"))
 
 async def lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """probably the function to setting the language"""
+    """the function to change users' languages (obviously after they initialized their language at first)"""
     user_id = str(update.effective_user.id)
     langs = load_json(LANG_FILE)
     current = langs.get(user_id, "en")
@@ -138,12 +155,14 @@ async def lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text(t(user_id, "lang_set"))
 
 async def set_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """an async Telegram bot command handler that
+    Gets and stores the user's email using their Telegram ID"""
     user_id = str(update.effective_user.id)
     email = " ".join(context.args).strip()
     emails = load_json(EMAIL_MAP_FILE)
     emails[user_id] = email
     save_json(EMAIL_MAP_FILE, emails)
-    await update.callback_query.message.reply_text(t(update.effective_user.id, "purchase"))
+    await update.callback_query.message.reply_text(t(update.effective_user.id, "email_received"))
 
 # --- Admin Broadcast ---
 async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,6 +180,10 @@ async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(chat_id=int(uid), text=msg)
         except:
             continue
+
+    # context.bot.send_message(chat_id=int(uid), text=msg):
+    # Sends a message to that user. int(uid) is used because JSON keys are strings,
+    # but chat_id needs to be an integer. msg is the message you want to send.
 
 # --- Webhook for Buy Me a Coffee ---
 async def bmc_webhook(request):
