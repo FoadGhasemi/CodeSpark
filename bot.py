@@ -199,7 +199,7 @@ async def bmc_webhook(request):
             premium[uid] = {
                 "email": email,
                 "amount": amount,
-                "timestamp": datetime.utcnow().isoformat()
+                #"timestamp": datetime.datetime. datetime. now(datetime. UTC).isoformat()
             }
             save_json(PREMIUM_FILE, premium)
             break
