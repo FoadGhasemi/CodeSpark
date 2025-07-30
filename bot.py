@@ -208,43 +208,45 @@ async def bmc_webhook(request):
 
 # --- Main ---
 async def main():
+    # Build bot app
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Handlers
+    # Add Telegram command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("quiz", quiz))
     app.add_handler(CommandHandler("score", score))
     app.add_handler(CommandHandler("setemail", set_email))
     app.add_handler(CommandHandler("broadcast", handle_admin_broadcast))
+
+    # Add Telegram callback query handlers
     app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer:"))
     app.add_handler(CallbackQueryHandler(upgrade_callback, pattern="^upgrade$"))
     app.add_handler(CallbackQueryHandler(lang_callback, pattern="^change_lang$"))
 
-    # Set webhook
+    # Init + Start the Telegram bot
     await app.initialize()
     await app.start()
     await app.bot.set_webhook(f"https://codespark-6p27.onrender.com/{TOKEN}")
 
-    # Start aiohttp server (if you need other routes like /bmc_webhook)
+    # Setup aiohttp web app for handling webhooks
     web_app = web.Application()
     web_app.add_routes([
         web.post("/bmc_webhook", bmc_webhook),
         web.post(f"/{TOKEN}", app.update_queue.put_nowait),  # Telegram webhook handler
     ])
 
+    # Run aiohttp server (instead of using _run_app which is internal/private API)
     runner = web.AppRunner(web_app)
     await runner.setup()
-
-    site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 8443)))
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 8443)))
     await site.start()
 
-    print("Bot is running...")
+    print("Bot is running on webhook...")
 
-    # Keep running forever
+    # Keep process alive
     while True:
         await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
