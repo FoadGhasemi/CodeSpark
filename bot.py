@@ -232,4 +232,19 @@ async def main():
         web.post("/bmc_webhook", bmc_webhook),
         web.post(f"/{TOKEN}", app.update_queue.put_nowait),  # Telegram webhook handler
     ])
-    await web._run_app(web_app, port=int(os.environ.get("PORT", 8443)))
+
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 8443)))
+    await site.start()
+
+    print("Bot is running...")
+
+    # Keep running forever
+    while True:
+        await asyncio.sleep(3600)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
